@@ -12,8 +12,8 @@ using OnlineEnrollment.Data;
 namespace OnlineEnrollment.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260329080756_AddPaymentModel")]
-    partial class AddPaymentModel
+    [Migration("20260329081226_FullSchema")]
+    partial class FullSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
