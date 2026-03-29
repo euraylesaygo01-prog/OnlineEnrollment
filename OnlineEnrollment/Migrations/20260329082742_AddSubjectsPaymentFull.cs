@@ -7,7 +7,7 @@
 namespace OnlineEnrollment.Migrations
 {
     /// <inheritdoc />
-    public partial class FullSchema : Migration
+    public partial class AddSubjectsPaymentFull : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
