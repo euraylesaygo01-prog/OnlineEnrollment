@@ -1,0 +1,488 @@
+﻿@page "/admin"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using OnlineEnrollment.Models
+@inject OnlineEnrollment.Data.AppDbContext DB
+@inject NavigationManager Nav
+
+<div class="page-bg">
+    <div class="top-bar">
+        <div class="top-left">
+            <span class="logo-icon">🎓</span>
+            <span class="logo-text">Online Enrollment</span>
+        </div>
+        <div class="top-right">
+            <span class="admin-badge">Admin Panel</span>
+            <button class="btn-logout" @onclick='() => Nav.NavigateTo("/")'>Logout</button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="tab-bar">
+            <button class="tab-btn @(activeTab == "students" ? "active" : "")" @onclick='() => activeTab = "students"'>👥 Students</button>
+            <button class="tab-btn @(activeTab == "courses" ? "active" : "")" @onclick='() => activeTab = "courses"'>📚 Programs</button>
+        </div>
+
+        @if (activeTab == "students")
+        {
+            <div class="section-header">
+                <h2>Student Management</h2>
+                <input @bind="searchQuery" @bind:event="oninput" placeholder="Search students..." class="search-input" />
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Student No.</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Program</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in filteredStudents)
+                        {
+                            <tr>
+                                <td>@s.StudentNumber</td>
+                                <td>@s.FirstName @s.LastName</td>
+                                <td>@s.Email</td>
+                                <td>@(string.IsNullOrEmpty(s.Program) ? "Not selected" : s.Program)</td>
+                                <td><span class="badge @GetStatusClass(s.Status)">@s.Status</span></td>
+                                <td class="action-btns">
+                                    <button class="btn-logout" @onclick='() => Nav.NavigateTo("/")'>Logout</button>
+                                    @if (s.Status == "Pending")
+                                    {
+                                        <button class="btn-approve" @onclick='() => UpdateStatus(s.Id, "Enrolled")'>Approve</button>
+                                        <button class="btn-reject" @onclick='() => UpdateStatus(s.Id, "Rejected")'>Reject</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (activeTab == "courses")
+        {
+            <div class="section-header">
+                <h2>Program Management</h2>
+                <button class="btn-add" @onclick="ShowAddForm">+ Add Program</button>
+            </div>
+
+            @if (showForm)
+            {
+                <div class="form-card">
+                    <h3>@(editingId == 0 ? "Add New Program" : "Edit Program")</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Program Name</label>
+                            <input @bind="formName" class="form-input" placeholder="Program name" />
+                        </div>
+                        <div class="form-group">
+                            <label>Department</label>
+                            <select @bind="formDept" class="form-input">
+                                <option value="">Select Department</option>
+                                <option>Business</option>
+                                <option>STEM</option>
+                                <option>Social Sciences</option>
+                                <option>Education</option>
+                                <option>General Education</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Units</label>
+                            <input type="number" @bind="formUnits" class="form-input" />
+                        </div>
+                        <div class="form-group">
+                            <label>Slots</label>
+                            <input type="number" @bind="formSlots" class="form-input" />
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-save" @onclick="SaveCourse">Save</button>
+                        <button class="btn-cancel" @onclick="() => showForm = false">Cancel</button>
+                    </div>
+                </div>
+            }
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Program Name</th>
+                            <th>Department</th>
+                            <th>Units</th>
+                            <th>Slots</th>
+                            <th>Enrolled</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in allCourses)
+                        {
+                            <tr>
+                                <td>@c.Name</td>
+                                <td>@c.Department</td>
+                                <td>@c.Units</td>
+                                <td>@c.Slots</td>
+                                <td>@c.EnrolledCount</td>
+                                <td><span class="badge @(c.IsActive ? "badge-enrolled" : "badge-rejected")">@(c.IsActive ? "Active" : "Inactive")</span></td>
+                                <td class="action-btns">
+                                    <button class="btn-view" @onclick="() => EditCourse(c)">Edit</button>
+                                    <button class="btn-reject" @onclick="() => ToggleCourse(c)">@(c.IsActive ? "Deactivate" : "Activate")</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    .page-bg {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0a0e2e 0%, #1a1f4e 50%, #0d1537 100%);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 32px;
+        background: rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .top-left { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 24px; }
+    .logo-text { color: #fff; font-size: 18px; font-weight: 700; }
+    .top-right { display: flex; align-items: center; gap: 12px; }
+
+    .admin-badge {
+        background: rgba(79,142,247,0.2);
+        border: 1px solid rgba(79,142,247,0.3);
+        color: #4f8ef7;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .btn-logout {
+        padding: 8px 16px;
+        background: rgba(239,68,68,0.15);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 8px;
+        color: #fca5a5;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .content { padding: 32px; }
+
+    .tab-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 28px;
+    }
+
+    .tab-btn {
+        padding: 10px 24px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px;
+        color: rgba(255,255,255,0.6);
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .tab-btn.active {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .section-header h2 { color: #fff; font-size: 22px; font-weight: 700; }
+
+    .search-input {
+        padding: 10px 16px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+        width: 260px;
+    }
+
+    .search-input::placeholder { color: rgba(255,255,255,0.3); }
+
+    .btn-add {
+        padding: 10px 20px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .table-container {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+
+    .data-table th {
+        background: rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.5);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 14px 16px;
+        text-align: left;
+    }
+
+    .data-table td {
+        padding: 14px 16px;
+        color: rgba(255,255,255,0.8);
+        font-size: 14px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .badge-pending { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .badge-enrolled { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-rejected { background: rgba(239,68,68,0.15); color: #fca5a5; }
+
+    .action-btns { display: flex; gap: 8px; }
+
+    .btn-view {
+        padding: 6px 12px;
+        background: rgba(79,142,247,0.15);
+        border: 1px solid rgba(79,142,247,0.3);
+        border-radius: 6px;
+        color: #4f8ef7;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .btn-approve {
+        padding: 6px 12px;
+        background: rgba(34,197,94,0.15);
+        border: 1px solid rgba(34,197,94,0.3);
+        border-radius: 6px;
+        color: #4ade80;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .btn-reject {
+        padding: 6px 12px;
+        background: rgba(239,68,68,0.15);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 6px;
+        color: #fca5a5;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .form-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+    }
+
+    .form-card h3 { color: #fff; font-size: 16px; margin-bottom: 16px; }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .form-group label {
+        display: block;
+        color: rgba(255,255,255,0.6);
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 10px 14px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+    }
+
+    .form-input option { background: #1a1f4e; }
+
+    .form-actions { display: flex; gap: 10px; }
+
+    .btn-save {
+        padding: 10px 24px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-cancel {
+        padding: 10px 24px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.6);
+        font-size: 14px;
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    string activeTab = "students";
+    string searchQuery = "";
+    List<Student> allStudents = new();
+    List<Course> allCourses = new();
+    bool showForm = false;
+    int editingId = 0;
+    string formName = "";
+    string formDept = "";
+    int formUnits = 24;
+    int formSlots = 40;
+
+    List<Student> filteredStudents => string.IsNullOrEmpty(searchQuery)
+        ? allStudents
+        : allStudents.Where(s =>
+            s.FirstName.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+            s.LastName.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+            s.Email.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+            s.StudentNumber.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    async Task LoadData()
+    {
+        allStudents = await DB.Students.ToListAsync();
+        allCourses = await DB.Courses.ToListAsync();
+    }
+
+    async Task UpdateStatus(int id, string status)
+    {
+        var student = await DB.Students.FindAsync(id);
+        if (student != null)
+        {
+            student.Status = status;
+            await DB.SaveChangesAsync();
+            await LoadData();
+        }
+    }
+
+    string GetStatusClass(string status) => status switch
+    {
+        "Enrolled" => "badge-enrolled",
+        "Rejected" => "badge-rejected",
+        _ => "badge-pending"
+    };
+
+    void ShowAddForm()
+    {
+        editingId = 0;
+        formName = "";
+        formDept = "";
+        formUnits = 24;
+        formSlots = 40;
+        showForm = true;
+    }
+
+    void EditCourse(Course c)
+    {
+        editingId = c.Id;
+        formName = c.Name;
+        formDept = c.Department;
+        formUnits = c.Units;
+        formSlots = c.Slots;
+        showForm = true;
+    }
+
+    async Task SaveCourse()
+    {
+        if (editingId == 0)
+        {
+            var course = new Course
+            {
+                Name = formName,
+                Department = formDept,
+                Units = formUnits,
+                Slots = formSlots,
+                IsActive = true
+            };
+            DB.Courses.Add(course);
+        }
+        else
+        {
+            var course = await DB.Courses.FindAsync(editingId);
+            if (course != null)
+            {
+                course.Name = formName;
+                course.Department = formDept;
+                course.Units = formUnits;
+                course.Slots = formSlots;
+            }
+        }
+        await DB.SaveChangesAsync();
+        showForm = false;
+        await LoadData();
+    }
+
+    async Task ToggleCourse(Course c)
+    {
+        c.IsActive = !c.IsActive;
+        await DB.SaveChangesAsync();
+        await LoadData();
+    }
+}

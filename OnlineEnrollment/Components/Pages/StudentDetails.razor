@@ -1,0 +1,316 @@
+﻿@page "/admin/student/{StudentId:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using OnlineEnrollment.Models
+@inject OnlineEnrollment.Data.AppDbContext DB
+@inject NavigationManager Nav
+
+<div class="page-bg">
+    <div class="top-bar">
+        <div class="top-left">
+            <span class="logo-icon">🎓</span>
+            <span class="logo-text">Online Enrollment</span>
+        </div>
+        <button class="btn-back" @onclick='() => Nav.NavigateTo("/admin")'>← Back to Admin</button>
+    </div>
+
+    <div class="content">
+        @if (student == null)
+        {
+            <p class="loading">Loading...</p>
+        }
+        else
+        {
+            <div class="student-header">
+                <div class="avatar">@student.FirstName[0]@student.LastName[0]</div>
+                <div class="student-info">
+                    <h1>@student.FirstName @student.LastName</h1>
+                    <p>@student.StudentNumber</p>
+                    <span class="badge @GetStatusClass(student.Status)">@student.Status</span>
+                </div>
+                <div class="action-btns">
+                    @if (student.Status == "Pending")
+                    {
+                        <button class="btn-approve" @onclick='() => UpdateStatus("Enrolled")'>✓ Approve</button>
+                        <button class="btn-reject" @onclick='() => UpdateStatus("Rejected")'>✗ Reject</button>
+                    }
+                </div>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>Personal Information</h3>
+                    <div class="info-row">
+                        <span class="info-label">Email</span>
+                        <span class="info-value">@student.Email</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Phone</span>
+                        <span class="info-value">@student.Phone</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Address</span>
+                        <span class="info-value">@student.Address</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Birth Date</span>
+                        <span class="info-value">@student.BirthDate.ToString("MMMM dd, yyyy")</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Registered</span>
+                        <span class="info-value">@student.RegisteredAt.ToString("MMMM dd, yyyy")</span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>Enrolled Program</h3>
+                    @if (enrollments.Count == 0)
+                    {
+                        <p class="no-data">No program selected yet.</p>
+                    }
+                    else
+                    {
+                        @foreach (var e in enrollments)
+                        {
+                            <div class="course-item">
+                                <div class="course-name">@e.Course.Name</div>
+                                <div class="course-dept">@e.Course.Department</div>
+                                <div class="course-units">@e.Course.Units units</div>
+                            </div>
+                        }
+                        <div class="total-units">
+                            Total Units: <strong>@enrollments.Sum(e => e.Course.Units)</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    .page-bg {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0a0e2e 0%, #1a1f4e 50%, #0d1537 100%);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 32px;
+        background: rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .top-left { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 24px; }
+    .logo-text { color: #fff; font-size: 18px; font-weight: 700; }
+
+    .btn-back {
+        padding: 8px 16px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.7);
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .content { padding: 32px; }
+
+    .loading { color: rgba(255,255,255,0.5); }
+
+    .student-header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .avatar {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 22px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .student-info { flex: 1; }
+
+    .student-info h1 {
+        color: #fff;
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+    .student-info p {
+        color: #4f8ef7;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .badge-pending { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .badge-enrolled { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-rejected { background: rgba(239,68,68,0.15); color: #fca5a5; }
+
+    .action-btns { display: flex; gap: 10px; }
+
+    .btn-approve {
+        padding: 10px 20px;
+        background: rgba(34,197,94,0.15);
+        border: 1px solid rgba(34,197,94,0.3);
+        border-radius: 8px;
+        color: #4ade80;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-reject {
+        padding: 10px 20px;
+        background: rgba(239,68,68,0.15);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 8px;
+        color: #fca5a5;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .info-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 24px;
+    }
+
+    .info-card h3 {
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .info-label {
+        color: rgba(255,255,255,0.4);
+        font-size: 13px;
+    }
+
+    .info-value {
+        color: rgba(255,255,255,0.8);
+        font-size: 13px;
+        text-align: right;
+        max-width: 60%;
+    }
+
+    .no-data {
+        color: rgba(255,255,255,0.3);
+        font-size: 14px;
+        text-align: center;
+        padding: 20px 0;
+    }
+
+    .course-item {
+        background: rgba(79,142,247,0.08);
+        border: 1px solid rgba(79,142,247,0.15);
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 10px;
+    }
+
+    .course-name {
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .course-dept {
+        color: #4f8ef7;
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .course-units {
+        color: rgba(255,255,255,0.4);
+        font-size: 12px;
+    }
+
+    .total-units {
+        color: rgba(255,255,255,0.6);
+        font-size: 14px;
+        text-align: right;
+        margin-top: 12px;
+    }
+
+    .total-units strong { color: #fff; }
+</style>
+
+@code {
+    [Parameter] public int StudentId { get; set; }
+
+    Student? student;
+    List<Enrollment> enrollments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        student = await DB.Students.FindAsync(StudentId);
+        enrollments = await DB.Enrollments
+            .Include(e => e.Course)
+            .Where(e => e.StudentId == StudentId)
+            .ToListAsync();
+    }
+
+    async Task UpdateStatus(string status)
+    {
+        if (student != null)
+        {
+            student.Status = status;
+            await DB.SaveChangesAsync();
+        }
+    }
+
+    string GetStatusClass(string status) => status switch
+    {
+        "Enrolled" => "badge-enrolled",
+        "Rejected" => "badge-rejected",
+        _ => "badge-pending"
+    };
+}

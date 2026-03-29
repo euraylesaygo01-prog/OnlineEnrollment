@@ -1,0 +1,589 @@
+﻿@page "/courses/{StudentId:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using OnlineEnrollment.Models
+@inject OnlineEnrollment.Data.AppDbContext DB
+@inject NavigationManager Nav
+
+<div class="page-bg">
+    <div class="top-bar">
+        <div class="top-left">
+            <span class="logo-icon">🎓</span>
+            <span class="logo-text">Online Enrollment</span>
+        </div>
+        <div class="student-info">
+            <span>@studentName</span>
+            <span class="student-num">@studentNumber</span>
+        </div>
+    </div>
+
+    @if (submitted)
+    {
+        <div class="success-container">
+            <div class="success-card">
+                <div class="success-icon">🎉</div>
+                <h2>Enrollment Submitted!</h2>
+                <p>Your program selection has been submitted successfully.</p>
+                <div class="enrolled-program">@selectedProgramName</div>
+                <button class="btn-back" @onclick='() => Nav.NavigateTo("/")'>Back to Login</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="content">
+            <div class="page-header">
+                <h2>Select Your Program</h2>
+                <p>Choose one program to enroll in. Click a program to view its subjects.</p>
+            </div>
+
+            <div class="filter-bar">
+                @foreach (var dept in departments)
+                {
+                    <button class="filter-btn @(selectedDept == dept ? "active" : "")"
+                        @onclick="() => { selectedDept = dept; selectedCourse = null; }">@dept</button>
+                }
+            </div>
+
+            <div class="main-layout">
+                <div class="courses-grid">
+                    @foreach (var course in filteredCourses)
+                    {
+                        <div class="course-card @(selectedCourseIds.Contains(course.Id) ? "selected" : "") @(selectedCourse?.Id == course.Id ? "viewing" : "")"
+                            @onclick="() => SelectCourse(course)">
+                            <div class="course-dept">@course.Department</div>
+                            <div class="course-name">@course.Name</div>
+                            <div class="course-footer">
+                                <span>@course.Units units</span>
+                                <span>@course.Slots slots</span>
+                            </div>
+                            @if (selectedCourseIds.Contains(course.Id))
+                            {
+                                <div class="selected-badge">✓ Selected</div>
+                            }
+                            <div class="view-subjects-hint">📋 Click to view subjects</div>
+                        </div>
+                    }
+                </div>
+
+                @if (selectedCourse != null)
+                {
+                    <div class="subjects-panel">
+                        <div class="panel-header">
+                            <div>
+                                <h3>@selectedCourse.Name</h3>
+                                <p>@selectedCourse.Department</p>
+                            </div>
+                            <button class="btn-close" @onclick="() => selectedCourse = null">✕</button>
+                        </div>
+
+                        <div class="year-tabs">
+                            @foreach (var year in new[] { 1, 2, 3, 4 })
+                            {
+                                <button class="year-btn @(selectedYear == year ? "active" : "")"
+                                    @onclick="() => { selectedYear = year; selectedSemester = 1; }">
+                                    Year @year
+                                </button>
+                            }
+                        </div>
+
+                        <div class="sem-tabs">
+                            <button class="sem-btn @(selectedSemester == 1 ? "active" : "")"
+                                @onclick="() => selectedSemester = 1">1st Semester</button>
+                            <button class="sem-btn @(selectedSemester == 2 ? "active" : "")"
+                                @onclick="() => selectedSemester = 2">2nd Semester</button>
+                        </div>
+
+                        <div class="subjects-list">
+                            @{
+                                var majorSubs = allSubjects
+                                    .Where(s => s.Type == "Major" && s.CourseId == selectedCourse.Id
+                                        && s.YearLevel == selectedYear && s.Semester == selectedSemester)
+                                    .ToList();
+
+                                var minorSubs = allSubjects
+                                    .Where(s => s.Type == "Minor" && s.CourseId == null
+                                        && s.YearLevel == selectedYear && s.Semester == selectedSemester)
+                                    .ToList();
+                            }
+
+                            @if (majorSubs.Count > 0)
+                            {
+                                <div class="subject-section-title major-title">📘 Major Subjects</div>
+                                @foreach (var sub in majorSubs)
+                                {
+                                    <div class="subject-item major">
+                                        <span class="sub-name">@sub.Name</span>
+                                        <span class="sub-units">@sub.Units units</span>
+                                    </div>
+                                }
+                            }
+
+                            @if (minorSubs.Count > 0)
+                            {
+                                <div class="subject-section-title minor-title">📗 Minor Subjects</div>
+                                @foreach (var sub in minorSubs)
+                                {
+                                    <div class="subject-item minor">
+                                        <span class="sub-name">@sub.Name</span>
+                                        <span class="sub-units">@sub.Units units</span>
+                                    </div>
+                                }
+                            }
+
+                            <div class="total-units-bar">
+                                Total: <strong>@((majorSubs.Count + minorSubs.Count) * 3) units</strong> this semester
+                            </div>
+                        </div>
+
+                        <button class="btn-select-course @(selectedCourseIds.Contains(selectedCourse.Id) ? "selected" : "")"
+                            @onclick="() => ToggleCourse(selectedCourse.Id)">
+                            @(selectedCourseIds.Contains(selectedCourse.Id) ? "✓ Selected" : "Select This Program")
+                        </button>
+                    </div>
+                }
+            </div>
+
+            @if (selectedCourseIds.Count > 0)
+            {
+                <div class="submit-bar">
+                    <span>Selected: <strong>@selectedProgramName</strong></span>
+                    <button class="btn-submit" @onclick="SubmitEnrollment">Submit Enrollment</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    .page-bg {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0a0e2e 0%, #1a1f4e 50%, #0d1537 100%);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 32px;
+        background: rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .top-left { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 24px; }
+    .logo-text { color: #fff; font-size: 18px; font-weight: 700; }
+
+    .student-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        color: rgba(255,255,255,0.7);
+        font-size: 13px;
+    }
+
+    .student-num { color: #4f8ef7; font-weight: 600; }
+
+    .content { padding: 32px; }
+
+    .page-header { margin-bottom: 24px; }
+    .page-header h2 { color: #fff; font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .page-header p { color: rgba(255,255,255,0.5); font-size: 14px; }
+
+    .filter-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+
+    .filter-btn {
+        padding: 8px 18px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 20px;
+        color: rgba(255,255,255,0.7);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .filter-btn.active, .filter-btn:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .main-layout {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+        margin-bottom: 100px;
+    }
+
+    .courses-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+        flex: 1;
+    }
+
+    .course-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 20px;
+        cursor: pointer;
+        transition: all 0.3s;
+        position: relative;
+    }
+
+    .course-card:hover { background: rgba(255,255,255,0.08); border-color: #4f8ef7; }
+    .course-card.selected { background: rgba(79,142,247,0.15); border-color: #4f8ef7; }
+    .course-card.viewing { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+
+    .course-dept {
+        color: #4f8ef7;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+    }
+
+    .course-name { color: #fff; font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+
+    .course-footer {
+        display: flex;
+        gap: 12px;
+        color: rgba(255,255,255,0.4);
+        font-size: 12px;
+    }
+
+    .selected-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+
+    .view-subjects-hint {
+        margin-top: 10px;
+        color: rgba(255,255,255,0.3);
+        font-size: 11px;
+    }
+
+    /* SUBJECTS PANEL */
+    .subjects-panel {
+        width: 380px;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 20px;
+        padding: 24px;
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+
+    .panel-header h3 { color: #fff; font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .panel-header p { color: #4f8ef7; font-size: 12px; }
+
+    .btn-close {
+        background: rgba(255,255,255,0.08);
+        border: none;
+        color: rgba(255,255,255,0.5);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .year-tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .year-btn {
+        padding: 6px 14px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.6);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .year-btn.active {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .sem-tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 16px;
+    }
+
+    .sem-btn {
+        flex: 1;
+        padding: 7px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.6);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .sem-btn.active {
+        background: rgba(79,142,247,0.2);
+        border-color: #4f8ef7;
+        color: #4f8ef7;
+    }
+
+    .subjects-list { margin-bottom: 16px; }
+
+    .subject-section-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 8px 0 6px;
+        margin-top: 8px;
+    }
+
+    .major-title { color: #60a5fa; }
+    .minor-title { color: #4ade80; }
+
+    .subject-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        font-size: 13px;
+    }
+
+    .subject-item.major {
+        background: rgba(96,165,250,0.08);
+        border: 1px solid rgba(96,165,250,0.15);
+    }
+
+    .subject-item.minor {
+        background: rgba(74,222,128,0.06);
+        border: 1px solid rgba(74,222,128,0.12);
+    }
+
+    .sub-name { color: rgba(255,255,255,0.85); }
+    .sub-units { color: rgba(255,255,255,0.4); font-size: 12px; }
+
+    .total-units-bar {
+        text-align: right;
+        color: rgba(255,255,255,0.4);
+        font-size: 12px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .total-units-bar strong { color: #fff; }
+
+    .btn-select-course {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.3s;
+        margin-top: 4px;
+    }
+
+    .btn-select-course.selected {
+        background: rgba(79,142,247,0.2);
+        border: 1px solid #4f8ef7;
+        color: #4f8ef7;
+    }
+
+    .btn-select-course:hover { opacity: 0.9; }
+
+    .submit-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(10,14,46,0.95);
+        backdrop-filter: blur(20px);
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding: 16px 32px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: rgba(255,255,255,0.7);
+        font-size: 14px;
+    }
+
+    .submit-bar strong { color: #fff; }
+
+    .btn-submit {
+        padding: 12px 32px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .success-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 70px);
+    }
+
+    .success-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 24px;
+        padding: 48px 40px;
+        text-align: center;
+        max-width: 480px;
+    }
+
+    .success-icon { font-size: 64px; margin-bottom: 20px; }
+    .success-card h2 { color: #fff; font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+    .success-card p { color: rgba(255,255,255,0.5); font-size: 14px; margin-bottom: 20px; }
+
+    .enrolled-program {
+        background: rgba(79,142,247,0.15);
+        border: 1px solid rgba(79,142,247,0.3);
+        color: #4f8ef7;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        margin-bottom: 24px;
+    }
+
+    .btn-back {
+        padding: 12px 32px;
+        background: linear-gradient(135deg, #4f8ef7, #2563eb);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    [Parameter] public int StudentId { get; set; }
+
+    List<Course> allCourses = new();
+    List<Subject> allSubjects = new();
+    List<int> selectedCourseIds = new();
+    Course? selectedCourse = null;
+    string selectedDept = "All";
+    string studentName = "";
+    string studentNumber = "";
+    string selectedProgramName = "";
+    bool submitted = false;
+    int selectedYear = 1;
+    int selectedSemester = 1;
+
+    List<string> departments = new() { "All", "Business", "STEM", "Social Sciences", "Education", "General Education" };
+
+    List<Course> filteredCourses => selectedDept == "All"
+        ? allCourses
+        : allCourses.Where(c => c.Department == selectedDept).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        allCourses = await DB.Courses.Where(c => c.IsActive).ToListAsync();
+        allSubjects = await DB.Subjects.ToListAsync();
+        var student = await DB.Students.FindAsync(StudentId);
+        if (student != null)
+        {
+            studentName = $"{student.FirstName} {student.LastName}";
+            studentNumber = student.StudentNumber;
+        }
+    }
+
+    void SelectCourse(Course course)
+    {
+        if (selectedCourse?.Id == course.Id)
+        {
+            selectedCourse = null;
+        }
+        else
+        {
+            selectedCourse = course;
+            selectedYear = 1;
+            selectedSemester = 1;
+        }
+    }
+
+    void ToggleCourse(int courseId)
+    {
+        selectedCourseIds.Clear();
+        selectedCourseIds.Add(courseId);
+        var course = allCourses.FirstOrDefault(c => c.Id == courseId);
+        selectedProgramName = course?.Name ?? "";
+    }
+
+    async Task SubmitEnrollment()
+    {
+        foreach (var courseId in selectedCourseIds)
+        {
+            var enrollment = new Enrollment
+            {
+                StudentId = StudentId,
+                CourseId = courseId,
+                EnrolledAt = DateTime.Now
+            };
+            DB.Enrollments.Add(enrollment);
+
+            var course = await DB.Courses.FindAsync(courseId);
+            if (course != null) course.EnrolledCount++;
+        }
+
+        var student = await DB.Students.FindAsync(StudentId);
+        if (student != null && selectedCourseIds.Count > 0)
+        {
+            var course = allCourses.FirstOrDefault(c => c.Id == selectedCourseIds[0]);
+            if (course != null) student.Program = course.Name;
+        }
+
+        await DB.SaveChangesAsync();
+        submitted = true;
+    }
+}
